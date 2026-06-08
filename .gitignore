@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+
+userData.json
+basicSkills.json
+resetApp.py
