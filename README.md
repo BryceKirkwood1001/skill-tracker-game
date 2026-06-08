@@ -7,11 +7,11 @@ A Python application that gamifies learning new skills.
 - Track skills and progress
 - XP and leveling system
 - Basic user profiles
-- JSON persistence
+- JSON persistence (for user data)
+- SQLite database
 
 ## Planned Features
 
-- SQLite database
 - Achievements
 - Collectibles
 - Web UI

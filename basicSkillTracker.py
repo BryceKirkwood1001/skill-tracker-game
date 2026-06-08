@@ -1,19 +1,22 @@
 import json
+import sqlite3
 
 with open("userData.json", "r") as f: 
     user = json.load(f)
 
-def openSkills():
-    with open("basicSkills.json", "r") as f:
-        return json.load(f)
-    
-def updateSkills(new_list):
-    with open("basicSkills.json", "w") as f:
-        json.dump(new_list, f, indent=4)
-
 def updateUser(user):
     with open("userData.json", "w") as f:
         json.dump(user, f, indent=4)
+
+def addXp(val):
+    user["xp"] += val
+    if user["xp"] >= user["xp milestone"]:
+        while user["xp"] >= user["xp milestone"]:
+            user["level"] += 1
+            user["xp milestone"] = (user["level"] + 1) * 100
+        print(f"Congratulations, you have leveled up to level {user['level']}!")
+        print(f"You need {user["xp milestone"] - user['xp']} more XP to get to level {user['level'] + 1}.")
+    updateUser(user)
 
 def strInput(prompt):
     while True:
@@ -37,58 +40,116 @@ def intInput(prompt, allowZero):
             else:
                 return intIn
 
-def addXp(val):
-    user["xp"] += val
-    if user["xp"] >= user["xp milestone"]:
-        while user["xp"] >= user["xp milestone"]:
-            user["level"] += 1
-            user["xp milestone"] = (user["level"] + 1) * 100
-        print(f"Congratulations, you have leveled up to level {user['level']}!")
-        print(f"You need {user["xp milestone"] - user['xp']} more XP to get to level {user['level'] + 1}.")
-    updateUser(user)
+def getSkills():
+    with sqlite3.connect("skills.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("""SELECT * FROM skills""")
+        skills = cursor.fetchall()
+    return skills
 
-def progressCheck(skill, skill_list):
-    if skill_list[skill]["hours"] >= skill_list[skill]["goal"]:
-        print(f"Congratulations! You've reached your goal for {skill.title()}!")
-        addXp(skill_list[skill]["xp value"])
+def addSkill(name, goal, hours):
+    with sqlite3.connect("skills.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO skills
+            (name, goal, hours, xp_value)
+            VALUES (?, ?, ?, ?)
+            """, (name, goal, hours, goal * 10))
+
+def deleteSkill(del_choice):
+    with sqlite3.connect("skills.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        DELETE FROM skills
+        WHERE name = ?
+        """, (del_choice,))
+
+def progressSkill(name, addHours):
+    with sqlite3.connect("skills.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+        UPDATE skills
+        SET hours = hours + ?
+        WHERE name = ?
+        """, (addHours, name))
+
+def progressCheck(skillName):
+    with sqlite3.connect("skills.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("""SELECT hours, goal, xp_value FROM skills WHERE name = ?""", 
+                    (skillName,))
+        row = cursor.fetchone()
+
+    if row[0] >= row[1]:
+        print(f"Congratulations! You've reached your goal for {skillName}!")
+        addXp(row[2])
         while True:
             progChoice = intInput("Would you like to (1) update your goal or (2) remove the skill from your to-do list? ", False)
+
             if progChoice == 1: 
-                old_goal = skill_list[skill]["goal"]
+                old_goal = row[1]
                 while True:
                     updated_hours = intInput("New goal: ", False)
                     if updated_hours > old_goal:
                         break
                     else:
                         print("Your new goal should be greater than your old goal, please try again")
-                skill_list[skill]["goal"] = updated_hours
-                skill_list[skill]["xp value"] = (updated_hours - old_goal) * 10
-                updateSkills(skill_list)
+                with sqlite3.connect("skills.db") as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""UPDATE skills SET goal = ? WHERE name = ?""", 
+                                (updated_hours, skillName))
+                    cursor.execute("""UPDATE skills SET xp_value = ? WHERE name = ?""", 
+                                ((updated_hours - old_goal) * 10, skillName))
+                with sqlite3.connect("skills.db") as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""SELECT hours, goal, xp_value FROM skills WHERE name = ?""", 
+                                (skillName,))
+                    row = cursor.fetchone()
                 break
+
             elif progChoice == 2:
-                del skill_list[skill]
-                updateSkills(skill_list)
+                deleteSkill(skillName)
                 user["skills mastered"] += 1
                 updateUser(user)
                 print("Skill mastered!")
                 break
+
             else:
                 print("Invalid choice, please try again")
     else:
-        print("Your current progress in " + skill + ": ")
-        print(f"   Hours Logged: {skill_list[skill]['hours']} hrs")
-        print(f"   Goal: {skill_list[skill]['goal']} hrs")
-        print(f"   Progress: {(skill_list[skill]['hours'] / skill_list[skill]['goal']) * 100 :.1f}%")
+        print("Your current progress in " + skillName + ": ")
+        print(f"   Hours Logged: {row[0]} hrs")
+        print(f"   Goal: {row[1]} hrs")
+        if row[1] != 0:
+            print(f"   Progress: {(row[0] / row[1]) * 100 :.1f}%")
+        else:
+            print("   Error calculating progress percentage, goal is 0")
 
-def skillPrint(skill_list):
-    for skill, info in skill_list.items():
-        print(f"\n{skill.title()}: ")
-        print(f"   Hours Logged: {info['hours']} hrs")
-        print(f"   Goal: {info['goal']} hrs")
-        print(f"   Progress: {(info['hours'] / info['goal']) * 100 :.1f}%")
-        print(f"   XP Value: {info['xp value']}")
+def skillExistence(skillName): # Returns True if skillName exists and False otherwise
+    with sqlite3.connect("skills.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("""SELECT EXISTS(SELECT 1 FROM skills WHERE name = ?)""", (skillName,))
+        existence = cursor.fetchone()[0]
+    return existence == 1
 
-print("Project created by Bryce Kirkwood")
+def checkEmptyList(): # Returns 0 if there are no skills and >0 otherwise
+    with sqlite3.connect("skills.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("""SELECT COUNT(*) FROM skills""")
+        empty = cursor.fetchone()[0]
+    return empty
+
+def skillPrint():
+    skills = getSkills()
+    for name, goal, hours, xp_value in skills:
+        print(f"\n{name.title()}: ")
+        print(f"   Hours Logged: {hours} hrs")
+        print(f"   Goal: {goal} hrs")
+        if goal != 0:
+            print(f"   Progress: {(hours / goal) * 100 :.1f}%")
+        else:
+            print("   Error calculating progress percentage, goal is 0")
+        print(f"   XP Value: {xp_value}")
 
 if user["username"] == None:
     username = strInput("It appears this is your first time here, please enter a username: ")
@@ -113,74 +174,57 @@ while True:
         continue
     
     elif choice == 1:
-        skill_list = openSkills()
-
         while True:
             new_skill_name = strInput("Name of the new skill: ").lower()
-            if new_skill_name in skill_list:
+            if skillExistence(new_skill_name):
                 print("A skill with that name already exists, please try again")
             else:
                 break
         new_skill_goal = intInput("Goal number of hours: ", False)
         new_skill_hrs = intInput("Number of hours spent so far: ", True)
 
-        skill_list[new_skill_name] = {
-                "goal": new_skill_goal,
-                "hours": new_skill_hrs,
-                "xp value": new_skill_goal * 10
-        }
+        addSkill(new_skill_name, new_skill_goal, new_skill_hrs)
         user["hours logged"] += new_skill_hrs
 
         updateUser(user)
-        updateSkills(skill_list)
 
     elif choice == 2:
-        skill_list = openSkills()
-        
-        skillPrint(skill_list)
+        skillPrint()
         while True:
             update_choice = strInput("Which skill do you want to update? ").lower()
-            if update_choice not in skill_list:
+            if not skillExistence(update_choice):
                 print("Skill doesn't exist, please try again")
             else:
                 break
 
         update_hrs = intInput("Hours to add: ", True)
-        skill_list[update_choice]["hours"] += update_hrs
+        progressSkill(update_choice, update_hrs)
         user["hours logged"] += update_hrs
 
         updateUser(user)
-        updateSkills(skill_list)
-        progressCheck(update_choice, skill_list)
+        progressCheck(update_choice)
 
     elif choice == 3:
-        skill_list = openSkills()
-        if not skill_list:
+        if checkEmptyList() == 0:
             print("You have no skills in progress")
         else:
             print(f"{user['username']}'s Active Skills: ")
-            skillPrint(skill_list)
+            skillPrint()
 
     elif choice == 4:
-        skill_list = openSkills()
-
-        if not skill_list:
+        if checkEmptyList() == 0:
             print("You have no skills to delete")
             continue
-
-        skillPrint(skill_list)
+        skillPrint()
         while True:
             del_choice = strInput("Which skill do you want to delete? ").lower()
-            if del_choice not in skill_list:
+            if not skillExistence(del_choice):
                 print("Skill doesn't exist, please try again")
             else:
                 break
-        del skill_list[del_choice]
-
-        updateSkills(skill_list)
-
+        deleteSkill(del_choice)
         print("\nHere is your new list of skills:")
-        skillPrint(skill_list)
+        skillPrint()
 
     elif choice == 5:
         print(f"{user['username']}'s Profile: ")
