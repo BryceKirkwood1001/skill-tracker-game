@@ -1,5 +1,19 @@
 import json
 import sqlite3
+import os
+
+# Creates a user data JSON file if one doesn't exist
+if not os.path.exists("userData.json"):
+    default_user = {
+        "username": None,
+        "xp": 0,
+        "level": 0,
+        "xp milestone": 100,
+        "skills mastered": 0,
+        "hours logged": 0
+    }
+    with open("userData.json", "w") as f:
+        json.dump(default_user, f, indent=4)
 
 with open("userData.json", "r") as f: 
     user = json.load(f)
@@ -151,6 +165,7 @@ def skillPrint():
             print("   Error calculating progress percentage, goal is 0")
         print(f"   XP Value: {xp_value}")
 
+# Prompts the user to create a simple account when a new user data file is created
 if user["username"] == None:
     username = strInput("It appears this is your first time here, please enter a username: ")
     user["username"] = username
