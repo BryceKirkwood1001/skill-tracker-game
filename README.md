@@ -2,6 +2,8 @@
 
 A Python application that gamifies learning new skills.
 
+To use the app, run database_setup.py first to create the database used to store your goals.
+
 ## Current Features
 
 - Track skills and progress
