@@ -18,11 +18,11 @@ if not os.path.exists("userData.json"):
 with open("userData.json", "r") as f: 
     user = json.load(f)
 
-def updateUser(user):
+def updateUser(user): # Commits any changes made to userData
     with open("userData.json", "w") as f:
         json.dump(user, f, indent=4)
 
-def addXp(val):
+def addXp(val): # Adds xp to userData and checks for level-ups
     user["xp"] += val
     if user["xp"] >= user["xp milestone"]:
         while user["xp"] >= user["xp milestone"]:
@@ -32,7 +32,7 @@ def addXp(val):
         print(f"You need {user["xp milestone"] - user['xp']} more XP to get to level {user['level'] + 1}.")
     updateUser(user)
 
-def strInput(prompt):
+def strInput(prompt): # Handles user string input
     while True:
         strIn = str(input(prompt)).strip()
         if strIn:
@@ -40,7 +40,7 @@ def strInput(prompt):
         else:
             print("Input cannot be empty")
         
-def intInput(prompt, allowZero):
+def intInput(prompt, allowZero): # Handles user int input
     while True:
         try:
             intIn = int(input(prompt))
@@ -54,14 +54,24 @@ def intInput(prompt, allowZero):
             else:
                 return intIn
 
-def getSkills():
+def getSkills(): # Returns all rows from the skills table
     with sqlite3.connect("skills.db") as conn:
         cursor = conn.cursor()
         cursor.execute("""SELECT * FROM skills""")
         skills = cursor.fetchall()
     return skills
 
-def addSkill(name, goal, hours):
+def getSkill(name): # Returns a single row from the skills table
+    with sqlite3.connect("skills.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT hours, goal, xp_value
+            FROM skills
+            WHERE name = ?
+            """, (name,))
+        return cursor.fetchone()
+
+def addSkill(name, goal, hours): # Adds a new skill to the skills table
     with sqlite3.connect("skills.db") as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -70,7 +80,7 @@ def addSkill(name, goal, hours):
             VALUES (?, ?, ?, ?)
             """, (name, goal, hours, goal * 10))
 
-def deleteSkill(del_choice):
+def deleteSkill(del_choice): # Deletes a skill from the skills table
     with sqlite3.connect("skills.db") as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -78,7 +88,7 @@ def deleteSkill(del_choice):
         WHERE name = ?
         """, (del_choice,))
 
-def progressSkill(name, addHours):
+def progressSkill(name, addHours): # Adds hours towards competing a skill
     with sqlite3.connect("skills.db") as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -87,13 +97,8 @@ def progressSkill(name, addHours):
         WHERE name = ?
         """, (addHours, name))
 
-def progressCheck(skillName):
-    with sqlite3.connect("skills.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("""SELECT hours, goal, xp_value FROM skills WHERE name = ?""", 
-                    (skillName,))
-        row = cursor.fetchone()
-
+def progressCheck(skillName): # Checks if a user has completed a skill and handles nect steps
+    row = getSkill(skillName)
     if row[0] >= row[1]:
         print(f"Congratulations! You've reached your goal for {skillName}!")
         addXp(row[2])
@@ -110,15 +115,16 @@ def progressCheck(skillName):
                         print("Your new goal should be greater than your old goal, please try again")
                 with sqlite3.connect("skills.db") as conn:
                     cursor = conn.cursor()
-                    cursor.execute("""UPDATE skills SET goal = ? WHERE name = ?""", 
-                                (updated_hours, skillName))
-                    cursor.execute("""UPDATE skills SET xp_value = ? WHERE name = ?""", 
-                                ((updated_hours - old_goal) * 10, skillName))
-                with sqlite3.connect("skills.db") as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("""SELECT hours, goal, xp_value FROM skills WHERE name = ?""", 
-                                (skillName,))
-                    row = cursor.fetchone()
+                    cursor.execute("""
+                        UPDATE skills
+                        SET goal = ? 
+                        WHERE name = ?
+                        """, (updated_hours, skillName))
+                    cursor.execute("""
+                        UPDATE skills 
+                        SET xp_value = ? 
+                        WHERE name = ?""", ((updated_hours - old_goal) * 10, skillName))
+                row = getSkill(skillName)
                 break
 
             elif progChoice == 2:
@@ -153,7 +159,7 @@ def checkEmptyList(): # Returns 0 if there are no skills and >0 otherwise
         empty = cursor.fetchone()[0]
     return empty
 
-def skillPrint():
+def skillPrint(): # Prints data from the skills table in a readable format
     skills = getSkills()
     for name, goal, hours, xp_value in skills:
         print(f"\n{name.title()}: ")
@@ -188,7 +194,7 @@ while True:
         print("No option corresponds to input, please try again")
         continue
     
-    elif choice == 1:
+    elif choice == 1: # Add a new skill -------------------------------------
         while True:
             new_skill_name = strInput("Name of the new skill: ").lower()
             if skillExistence(new_skill_name):
@@ -203,7 +209,7 @@ while True:
 
         updateUser(user)
 
-    elif choice == 2:
+    elif choice == 2: # Make progress on a skill ----------------------------
         skillPrint()
         while True:
             update_choice = strInput("Which skill do you want to update? ").lower()
@@ -219,14 +225,14 @@ while True:
         updateUser(user)
         progressCheck(update_choice)
 
-    elif choice == 3:
+    elif choice == 3: # View all skills -------------------------------------
         if checkEmptyList() == 0:
             print("You have no skills in progress")
         else:
             print(f"{user['username']}'s Active Skills: ")
             skillPrint()
 
-    elif choice == 4:
+    elif choice == 4: # Delete a skill --------------------------------------
         if checkEmptyList() == 0:
             print("You have no skills to delete")
             continue
@@ -241,10 +247,10 @@ while True:
         print("\nHere is your new list of skills:")
         skillPrint()
 
-    elif choice == 5:
+    elif choice == 5: # View profile ----------------------------------------
         print(f"{user['username']}'s Profile: ")
         for label, data in user.items():
             print(f"{label.title()}: {data}")
 
-    elif choice == 6:
+    elif choice == 6: # Exit
         break
